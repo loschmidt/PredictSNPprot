@@ -1,0 +1,343 @@
+{
+  "version": "2.0",
+  "created": "2026-05-20T15:11:56Z",
+  "pipeline_variant": "full",
+  "feature_cols": [
+    "3cnet",
+    "esmVariants",
+    "provean",
+    "vespal",
+    "vespag",
+    "varipred",
+    "phact",
+    "phactBoost",
+    "gemme"
+  ],
+  "cols_to_flip": [
+    "esmVariants",
+    "provean",
+    "vespag",
+    "phact",
+    "gemme"
+  ],
+  "scaler": {
+    "feature_range": [
+      0.0,
+      1.0
+    ],
+    "clip": true,
+    "scale": [
+      1.0334641863626963,
+      0.05311958576082353,
+      0.07085238967397273,
+      1.500300798195564,
+      1.247529890816184,
+      1.0007032477123488,
+      1.1577800914075065,
+      1.0002977672719346,
+      0.12136549831664628
+    ],
+    "min": [
+      -4.000283009630142e-05,
+      0.008492184033207084,
+      0.1489210952362396,
+      -0.2934413961056498,
+      1.1671690053693686,
+      -0.0001258105423770219,
+      1.0,
+      -4.310357277699913e-05,
+      0.01745143181346339
+    ],
+    "data_min": [
+      3.870751461363398e-05,
+      -0.15986916899999987,
+      -2.10185,
+      0.19558837565012063,
+      -0.935584,
+      0.000125722128577708,
+      -0.8637218824382321,
+      4.309074176437831e-05,
+      -0.1437923631964339
+    ],
+    "data_max": [
+      0.9676581114530565,
+      18.66557884,
+      12.012,
+      0.8621213810332519,
+      -0.134,
+      0.9994229686260221,
+      -0.0,
+      0.9997454121087842,
+      8.09578160032794
+    ],
+    "data_range": [
+      0.9676194039384428,
+      18.825448009,
+      14.113850000000001,
+      0.6665330053831312,
+      0.801584,
+      0.9992972464974443,
+      0.8637218824382321,
+      0.9997023213670199,
+      8.239573963524375
+    ],
+    "n_samples_seen": 2,
+    "feature_names": [
+      "3cnet",
+      "esmVariants",
+      "provean",
+      "vespal",
+      "vespag",
+      "varipred",
+      "phact",
+      "phactBoost",
+      "gemme"
+    ]
+  },
+  "imputer": {
+    "max_iter": 10,
+    "tol": 0.001,
+    "n_nearest_features": null,
+    "initial_strategy": "mean",
+    "imputation_order": "ascending",
+    "n_iter_": 1,
+    "n_features_in_": 9,
+    "feature_names_in_": [
+      "3cnet",
+      "esmVariants",
+      "provean",
+      "vespal",
+      "vespag",
+      "varipred",
+      "phact",
+      "phactBoost",
+      "gemme"
+    ],
+    "n_rounds": 1,
+    "entries_per_round": 9,
+    "initial_imputer": {
+      "strategy": "mean",
+      "statistics_": [
+        0.21177639671377413,
+        0.47461262847944014,
+        0.4107109424479332,
+        0.43650645270325245,
+        0.40916604658630523,
+        0.37148383827317083,
+        0.16959462684458537,
+        0.41031205315824193,
+        0.43126694916744013
+      ],
+      "n_features_in_": 9,
+      "feature_names_in_": [
+        "3cnet",
+        "esmVariants",
+        "provean",
+        "vespal",
+        "vespag",
+        "varipred",
+        "phact",
+        "phactBoost",
+        "gemme"
+      ]
+    },
+    "rounds": [
+      [
+        {
+          "feat_idx": 0,
+          "neighbor_feat_indices": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "estimator_type": "BayesianRidge",
+          "estimator_file": "imputer_estimators/round_0_entry_0.json"
+        },
+        {
+          "feat_idx": 1,
+          "neighbor_feat_indices": [
+            0,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "estimator_type": "BayesianRidge",
+          "estimator_file": "imputer_estimators/round_0_entry_1.json"
+        },
+        {
+          "feat_idx": 2,
+          "neighbor_feat_indices": [
+            0,
+            1,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "estimator_type": "BayesianRidge",
+          "estimator_file": "imputer_estimators/round_0_entry_2.json"
+        },
+        {
+          "feat_idx": 3,
+          "neighbor_feat_indices": [
+            0,
+            1,
+            2,
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "estimator_type": "BayesianRidge",
+          "estimator_file": "imputer_estimators/round_0_entry_3.json"
+        },
+        {
+          "feat_idx": 4,
+          "neighbor_feat_indices": [
+            0,
+            1,
+            2,
+            3,
+            5,
+            6,
+            7,
+            8
+          ],
+          "estimator_type": "BayesianRidge",
+          "estimator_file": "imputer_estimators/round_0_entry_4.json"
+        },
+        {
+          "feat_idx": 5,
+          "neighbor_feat_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            6,
+            7,
+            8
+          ],
+          "estimator_type": "BayesianRidge",
+          "estimator_file": "imputer_estimators/round_0_entry_5.json"
+        },
+        {
+          "feat_idx": 6,
+          "neighbor_feat_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            7,
+            8
+          ],
+          "estimator_type": "BayesianRidge",
+          "estimator_file": "imputer_estimators/round_0_entry_6.json"
+        },
+        {
+          "feat_idx": 7,
+          "neighbor_feat_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            8
+          ],
+          "estimator_type": "BayesianRidge",
+          "estimator_file": "imputer_estimators/round_0_entry_7.json"
+        },
+        {
+          "feat_idx": 8,
+          "neighbor_feat_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "estimator_type": "BayesianRidge",
+          "estimator_file": "imputer_estimators/round_0_entry_8.json"
+        }
+      ]
+    ]
+  },
+  "classifier": {
+    "model_file": "classifier.json",
+    "classes": [
+      0,
+      1
+    ],
+    "n_features_in_": 9,
+    "feature_names": [
+      "3cnet",
+      "esmVariants",
+      "provean",
+      "vespal",
+      "vespag",
+      "varipred",
+      "phact",
+      "phactBoost",
+      "gemme"
+    ],
+    "best_params": {
+      "colsample_bytree": 0.8,
+      "gamma": 0.1,
+      "learning_rate": 0.05,
+      "max_depth": 4,
+      "min_child_weight": 5,
+      "n_estimators": 300,
+      "reg_alpha": 1.0,
+      "reg_lambda": 2.0,
+      "subsample": 0.6
+    },
+    "best_cv_score": 0.8264332084861106
+  },
+  "training_meta": {
+    "best_model": "xgb_3",
+    "best_model_type": "XGBClassifier",
+    "cv_folds": 5,
+    "random_state": 42,
+    "n_train_samples": 8144,
+    "class_distribution": {
+      "0": 3792,
+      "1": 4352
+    },
+    "scores": {
+      "cv_auc": 0.826433,
+      "cv_std": 0.008938,
+      "train_auc": 0.890003,
+      "overfit_gap": 0.06357
+    },
+    "best_params": {
+      "colsample_bytree": 0.8,
+      "gamma": 0.1,
+      "learning_rate": 0.05,
+      "max_depth": 4,
+      "min_child_weight": 5,
+      "n_estimators": 300,
+      "reg_alpha": 1.0,
+      "reg_lambda": 2.0,
+      "subsample": 0.6
+    }
+  }
+}
