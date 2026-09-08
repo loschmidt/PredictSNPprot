@@ -31,7 +31,6 @@ import xgboost as xgb
 import shlex
 
 import logging
-from predictsnp_prot_predictor.predictor_merger import merge_predictors
 from predictsnp_prot_predictor.reconstructors import reconstruct_feature_selector, reconstruct_column_flipper, \
     reconstruct_scaler, reconstruct_imputer, reconstruct_xgb
 
@@ -152,26 +151,6 @@ def run_pipeline(df: pd.DataFrame, pipeline: dict[str, Any]) -> pd.DataFrame:
 
 
 # ===========================================================================
-# Matrix output
-# ===========================================================================
-def save_as_matrix(df: pd.DataFrame, output_path: str) -> None:
-    matrix = (
-        df[["WT residue", "Position", "MT", "proba"]]
-        .drop_duplicates(subset=["Position", "MT"])
-        .pivot(index=["Position", "WT residue"], columns="MT", values="proba")
-        .reset_index()
-    )
-
-    for aa in AA_ORDER:
-        if aa not in matrix.columns:
-            matrix[aa] = np.nan
-
-    matrix = matrix[["WT residue", "Position"] + AA_ORDER].sort_values("Position")
-    matrix[AA_ORDER] = matrix[AA_ORDER].apply(pd.to_numeric, errors="coerce")
-
-    matrix.to_csv(output_path, index=False, na_rep="NaN")
-
-# ===========================================================================
 # CLI
 # ===========================================================================
 def parse_args():
@@ -180,14 +159,12 @@ def parse_args():
         description="Apply reconstructed JSON pipeline to new input data.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--batch-input", required=False,
+    parser.add_argument("--input", required=False,
                         help="Input CSV with raw feature scores.")
     parser.add_argument("--output", required=False,
                         help="Output CSV path for predictions.")
     parser.add_argument("--cols", action="append", default=[],
                         help="Columns to be stored in output csv")
-    parser.add_argument("--matrix", required=False,
-                        help="Path for matrix format output")
     parser.add_argument("--artifacts-dir", default=None,
                         help="Override default artifact directory,")
     return parser.parse_args()
@@ -206,9 +183,9 @@ def main():
     # Load pipeline
     pipeline = load_pipeline(artifacts_dir)
 
-    if args.batch_input:
-        df = pd.read_csv(args.batch_input)
-        logger.info(f"Loaded existing input CSV: {args.batch_input} ({len(df)} rows)")
+    if args.input:
+        df = pd.read_csv(args.input)
+        logger.info(f"Loaded existing input CSV: {args.input} ({len(df)} rows)")
     else:
         logger.error(f"No input method selected! Exiting now!")
         sys.exit(-1)
@@ -220,8 +197,6 @@ def main():
             out = out[args.cols]
         out.to_csv(args.output, index=False)
         logger.info(f"Output: {args.output} ({len(out)} rows)")
-    if args.matrix:
-        save_as_matrix(out, args.matrix)
 
 if __name__ == "__main__":
     main()
