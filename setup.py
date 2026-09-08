@@ -28,7 +28,9 @@ setup(
             "data-preparation=predictsnp_prot_predictor.training.data_preparation:main",
             "train-classifier=predictsnp_prot_predictor.training.train_classifier:main",
             "train-imputer=predictsnp_prot_predictor.training.train_imputer:main",
-            "train-scaler=predictsnp_prot_predictor.training.train_scaler:main"
+            "train-scaler=predictsnp_prot_predictor.training.train_scaler:main",
+            "convert-artifact=predictsnp_prot_predictor.training.convert_artifact:main",
+            "evaluate=predictsnp_prot_predictor.training.evaluate:main"
         ],
     },
     classifiers=[
