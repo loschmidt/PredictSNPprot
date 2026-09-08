@@ -8,8 +8,7 @@ and applies it to new input data.
 Pipeline: FeatureSelector -> ColumnFlipper -> MinMaxScaler -> IterativeImputer -> XGBClassifier
 
 CLI usage:
-    python predict_scores.py --input data.csv --variant full --output predictions.csv
-    python predict_scores.py --input data.csv --variant fast --output predictions.csv
+    python predict_scores.py --input data.csv --output predictions.csv
 
 Module usage:
     from apply_pipeline import load_pipeline, run_pipeline
@@ -45,27 +44,7 @@ AA_ORDER = list("ACDEFGHIKLMNPQRSTVWY")
 # ---------------------------------------------------------------------------
 _HERE = Path(__file__).parent / "pipeline"
 
-PIPELINE_VARIANTS: dict[str, Path] = {
-    "full": _HERE / "pipeline_artifacts_full",
-    "fast": _HERE / "pipeline_artifacts_fast",
-}
-
-REQUIRED_COLS = {"Position", "WT residue", "MT"}
-
-ALLOWED_PREDICTORS = {
-    "3Cnet",
-    "ESM1b",
-    "PROVEAN",
-    "VESPA_l",
-    "VariPred",
-    "VespaG",
-    "PHACT",
-    "PHACTBoost",
-    "GEMME",
-    "fullMetaModel",
-    "fastMetaModel"
-}
-
+PIPELINE_VARIANTS: dict[str, Path] = {"full": _HERE / "pipeline_artifacts_full"}
 
 # ===========================================================================
 # Pipeline loader
@@ -89,7 +68,6 @@ def load_pipeline(artifacts_dir: Path) -> dict[str, Any]:
         "imputer"    : IterativeImputer (fitted)
         "classifier" : xgb.Booster
         "config"     : raw pipeline_config.json dict
-        "variant"    : "full" | "fast"
     """
     artifacts_dir = Path(artifacts_dir)
     config_path   = artifacts_dir / "pipeline_config.json"
@@ -107,7 +85,6 @@ def load_pipeline(artifacts_dir: Path) -> dict[str, Any]:
     logger.info(f"Loading pipeline from : {artifacts_dir}")
     logger.info(f"  Version  : {cfg.get('version', 'unknown')}")
     logger.info(f"  Created  : {cfg.get('created', 'unknown')}")
-    logger.info(f"  Variant  : {cfg.get('pipeline_variant', 'unknown')}")
     logger.info(f"  Features : {n_feat} -> {cfg['feature_cols']}")
 
     selector = reconstruct_feature_selector(cfg)
@@ -137,7 +114,6 @@ def load_pipeline(artifacts_dir: Path) -> dict[str, Any]:
         "imputer":    imputer,
         "classifier": classifier,
         "config":     cfg,
-        "variant":    cfg['pipeline_variant'],
     }
 
 
@@ -169,18 +145,10 @@ def run_pipeline(df: pd.DataFrame, pipeline: dict[str, Any]) -> pd.DataFrame:
     proba = classifier.predict(dmat)
 
     cols = X.columns.intersection(df.columns)
-    out = df.drop(columns=cols).merge(X, left_index=True, right_index=True, how="left")
-    out["proba"]           = proba
-    out["predicted_label"] = (proba >= 0.5).astype(int)
+    df["PredictSNPProt"] = proba
 
-    n_path   = int((out["predicted_label"] == 1).sum())
-    n_benign = int((out["predicted_label"] == 0).sum())
-    logger.info(
-        f"  Processed {len(out)} rows -> "
-        f"{n_path} pathogenic ({100 * n_path / len(out):.1f}%), "
-        f"{n_benign} benign ({100 * n_benign / len(out):.1f}%)"
-    )
-    return out
+    logger.info(f"  Processed {len(df)} rows.")
+    return df
 
 
 # ===========================================================================
@@ -206,31 +174,7 @@ def save_as_matrix(df: pd.DataFrame, output_path: str) -> None:
 # ===========================================================================
 # CLI
 # ===========================================================================
-# vvvv this is needed, as core passes predictors as a single str, not individual tokens
-# we split it and let argparse process normally
-PREDICTORS_PATTERN = "|".join(re.escape(p) for p in sorted(ALLOWED_PREDICTORS))
-PREDICTOR_BLOB_RE = re.compile(rf"^(?:--({PREDICTORS_PATTERN})\b\s\S+\s?)+$")
-
-def normalize_argv(argv: list[str]) -> list[str]:
-    out = []
-    for arg in argv:
-        if isinstance(arg, str) and PREDICTOR_BLOB_RE.match(arg):
-            out.extend(shlex.split(arg))
-        else:
-            out.append(arg)
-    return out
-
-
-class PredictorAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
-        name = self.dest  # e.g. "PHACT", "VespaG"
-        if not hasattr(namespace, 'predictor_paths') or namespace.predictor_paths is None:
-            namespace.predictor_paths = {}
-        namespace.predictor_paths[name] = Path(values)
-
-
 def parse_args():
-    argv = normalize_argv(sys.argv[1:])
 
     parser = argparse.ArgumentParser(
         description="Apply reconstructed JSON pipeline to new input data.",
@@ -240,20 +184,13 @@ def parse_args():
                         help="Input CSV with raw feature scores.")
     parser.add_argument("--output", required=False,
                         help="Output CSV path for predictions.")
-    parser.add_argument("--variant", choices=["full", "fast"], default="full",
-                        help="Pipeline variant: full (9 features) or fast (5 features).")
     parser.add_argument("--cols", action="append", default=[],
                         help="Columns to be stored in output csv")
     parser.add_argument("--matrix", required=False,
                         help="Path for matrix format output")
     parser.add_argument("--artifacts-dir", default=None,
-                        help="Override default artifact directory for the chosen variant.")
-
-    for name in ALLOWED_PREDICTORS:
-        parser.add_argument(f"--{name}", dest=name, metavar="PATH", action=PredictorAction, default=argparse.SUPPRESS, help=f"Path to {name} predictor CSV")
-
-    return parser.parse_args(argv)
-
+                        help="Override default artifact directory,")
+    return parser.parse_args()
 
 def main():
     logging.basicConfig(level=logging.INFO)
@@ -264,7 +201,7 @@ def main():
     if args.artifacts_dir:
         artifacts_dir = Path(args.artifacts_dir)
     else:
-        artifacts_dir = PIPELINE_VARIANTS[args.variant]
+        artifacts_dir = PIPELINE_VARIANTS["full"]
 
     # Load pipeline
     pipeline = load_pipeline(artifacts_dir)
@@ -272,17 +209,9 @@ def main():
     if args.batch_input:
         df = pd.read_csv(args.batch_input)
         logger.info(f"Loaded existing input CSV: {args.batch_input} ({len(df)} rows)")
-    elif args.predictor_paths:
-        df = merge_predictors(args, args.predictor_paths, ALLOWED_PREDICTORS)
     else:
         logger.error(f"No input method selected! Exiting now!")
         sys.exit(-1)
-
-    missing_cols = REQUIRED_COLS - set(df.columns)
-    if missing_cols:
-        logger.error(f"Columns {missing_cols} not present in predictor CSV!")
-        sys.exit(-1)
-
 
     out = run_pipeline(df, pipeline)
 
@@ -290,7 +219,7 @@ def main():
         if args.cols:
             out = out[args.cols]
         out.to_csv(args.output, index=False)
-        logger.info(f"Output: {args.output} ({len(out)} rows, columns: proba, predicted_label)")
+        logger.info(f"Output: {args.output} ({len(out)} rows)")
     if args.matrix:
         save_as_matrix(out, args.matrix)
 
