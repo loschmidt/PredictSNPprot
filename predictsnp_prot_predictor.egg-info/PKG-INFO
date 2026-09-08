@@ -1,0 +1,29 @@
+Metadata-Version: 2.4
+Name: predictsnp-prot-predictor
+Version: 2.0.0.1.dev0
+Summary: Python package for predictsnp-prot tool
+Home-page: https://git.loschmidt.cz/predictsnp/predictsnp-prot-predictor
+Author: Loschmidt laboratories
+Author-email: ll-admin@sci.muni.cz
+License: MIT
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Environment :: Console
+Requires-Python: >=3.12
+Requires-Dist: numpy>=2.4.5
+Requires-Dist: scikit-learn>=1.8.0
+Requires-Dist: pandas>=3.0.3
+Requires-Dist: xgboost>=3.2.0
+Requires-Dist: SQLAlchemy>=2.0
+Requires-Dist: tqdm
+Requires-Dist: Bio
+Requires-Dist: matplotlib
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: home-page
+Dynamic: license
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

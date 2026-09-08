@@ -53,15 +53,15 @@ PIPELINE_VARIANTS: dict[str, Path] = {
 REQUIRED_COLS = {"Position", "WT residue", "MT"}
 
 ALLOWED_PREDICTORS = {
-    "3cnet",
-    "esmVariants",
-    "provean",
-    "vespal",
-    "varipred",
-    "vespag",
-    "phact",
-    "phactBoost",
-    "gemme",
+    "3Cnet",
+    "ESM1b",
+    "PROVEAN",
+    "VESPA_l",
+    "VariPred",
+    "VespaG",
+    "PHACT",
+    "PHACTBoost",
+    "GEMME",
     "fullMetaModel",
     "fastMetaModel"
 }
@@ -223,7 +223,7 @@ def normalize_argv(argv: list[str]) -> list[str]:
 
 class PredictorAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
-        name = self.dest  # e.g. "phact", "vespag"
+        name = self.dest  # e.g. "PHACT", "VespaG"
         if not hasattr(namespace, 'predictor_paths') or namespace.predictor_paths is None:
             namespace.predictor_paths = {}
         namespace.predictor_paths[name] = Path(values)

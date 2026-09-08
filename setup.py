@@ -24,7 +24,11 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "predict-score=predictsnp_prot_predictor.predict_scores:main"
+            "predict-score=predictsnp_prot_predictor.predict_scores:main",
+            "data-preparation=predictsnp_prot_predictor.training.data_preparation:main",
+            "train-classifier=predictsnp_prot_predictor.training.train_classifier:main",
+            "train-imputer=predictsnp_prot_predictor.training.train_imputer:main",
+            "train-scaler=predictsnp_prot_predictor.training.train_scaler:main"
         ],
     },
     classifiers=[

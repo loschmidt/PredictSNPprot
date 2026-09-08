@@ -3,22 +3,22 @@
   "created": "2026-05-20T15:11:56Z",
   "pipeline_variant": "full",
   "feature_cols": [
-    "3cnet",
-    "esmVariants",
-    "provean",
-    "vespal",
-    "vespag",
-    "varipred",
-    "phact",
-    "phactBoost",
-    "gemme"
+    "3Cnet",
+    "ESM1b",
+    "PROVEAN",
+    "VESPA_l",
+    "VespaG",
+    "VariPred",
+    "PHACT",
+    "PHACTBoost",
+    "GEMME"
   ],
   "cols_to_flip": [
-    "esmVariants",
-    "provean",
-    "vespag",
-    "phact",
-    "gemme"
+    "ESM1b",
+    "PROVEAN",
+    "VespaG",
+    "PHACT",
+    "GEMME"
   ],
   "scaler": {
     "feature_range": [
@@ -83,15 +83,15 @@
     ],
     "n_samples_seen": 2,
     "feature_names": [
-      "3cnet",
-      "esmVariants",
-      "provean",
-      "vespal",
-      "vespag",
-      "varipred",
-      "phact",
-      "phactBoost",
-      "gemme"
+      "3Cnet",
+      "ESM1b",
+      "PROVEAN",
+      "VESPA_l",
+      "VespaG",
+      "VariPred",
+      "PHACT",
+      "PHACTBoost",
+      "GEMME"
     ]
   },
   "imputer": {
@@ -103,15 +103,15 @@
     "n_iter_": 1,
     "n_features_in_": 9,
     "feature_names_in_": [
-      "3cnet",
-      "esmVariants",
-      "provean",
-      "vespal",
-      "vespag",
-      "varipred",
-      "phact",
-      "phactBoost",
-      "gemme"
+      "3Cnet",
+      "ESM1b",
+      "PROVEAN",
+      "VESPA_l",
+      "VespaG",
+      "VariPred",
+      "PHACT",
+      "PHACTBoost",
+      "GEMME"
     ],
     "n_rounds": 1,
     "entries_per_round": 9,
@@ -130,15 +130,15 @@
       ],
       "n_features_in_": 9,
       "feature_names_in_": [
-        "3cnet",
-        "esmVariants",
-        "provean",
-        "vespal",
-        "vespag",
-        "varipred",
-        "phact",
-        "phactBoost",
-        "gemme"
+        "3Cnet",
+        "ESM1b",
+        "PROVEAN",
+        "VESPA_l",
+        "VespaG",
+        "VariPred",
+        "PHACT",
+        "PHACTBoost",
+        "GEMME"
       ]
     },
     "rounds": [
@@ -289,15 +289,15 @@
     ],
     "n_features_in_": 9,
     "feature_names": [
-      "3cnet",
-      "esmVariants",
-      "provean",
-      "vespal",
-      "vespag",
-      "varipred",
-      "phact",
-      "phactBoost",
-      "gemme"
+      "3Cnet",
+      "ESM1b",
+      "PROVEAN",
+      "VESPA_l",
+      "VespaG",
+      "VariPred",
+      "PHACT",
+      "PHACTBoost",
+      "GEMME"
     ],
     "best_params": {
       "colsample_bytree": 0.8,
