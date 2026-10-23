@@ -3,7 +3,7 @@ train_scaler.py
 ---------------
 Trains and serialises the first three steps of the prediction pipeline:
 
-    FeatureSelector  →  ColumnFlipper  →  DataFrameMinMaxScaler (clip-trained)
+    FeatureSelector ColumnFlipper DataFrameMinMaxScaler (clip-trained)
 
 The scaler is fit on clipped scores to prevent outliers from dominating the
 [0, 1] range: percentile-based bounds are computed on the trainset and used
@@ -37,9 +37,6 @@ Config schema (pipeline_*.json)
     "feature_range": [0, 1]                      // MinMaxScaler output range (default [0,1])
 }
 """
-
-from __future__ import annotations
-
 import argparse
 import json
 import logging
@@ -50,7 +47,7 @@ import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import MinMaxScaler
-
+from features import *
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -191,9 +188,7 @@ class DataFrameMinMaxScaler(BaseEstimator, TransformerMixin):
 
     def _validate(self, X: pd.DataFrame):
         if not isinstance(X, pd.DataFrame):
-            raise TypeError(
-                f"DataFrameMinMaxScaler expects a DataFrame, got {type(X).__name__}."
-            )
+            raise TypeError(f"DataFrameMinMaxScaler expects a DataFrame, got {type(X).__name__}.")
 
 
 # ===========================================================================
@@ -215,8 +210,8 @@ def fit_clipped_scaler(
     transform time (clip=True).  This prevents extreme outliers from
     compressing the useful score distribution into a narrow band.
 
-    The scaler is fit on a synthetic 2-row DataFrame [lo, hi] — the
-    percentile bounds — rather than on the raw trainset.  This is exact
+    The scaler is fit on a synthetic 2-row DataFrame [lo, hi] the
+    percentile bounds rather than on the raw trainset.  This is exact
     because MinMaxScaler only uses min/max from the training data.
 
     Parameters
@@ -383,13 +378,17 @@ def load_preprocessing_steps(
     return selector, flipper, scaler
 
 
+def create_pipeline_config(**kwargs):
+    return kwargs
+
+
 # ===========================================================================
 # Main training function  (importable + CLI)
 # ===========================================================================
 
 def train_scaler(
     trainset_path: str | Path,
-    pipeline_config: dict[str, Any],
+    feature_cols: list[str],
     out_path: str | Path,
 ) -> tuple[FeatureSelector, ColumnFlipper, DataFrameMinMaxScaler]:
     """
@@ -404,25 +403,26 @@ def train_scaler(
 
     Returns
     -------
-    (selector, flipper, scaler)  — all three fitted, all DataFrame-compatible
+    (selector, flipper, scaler) all three fitted, all DataFrame-compatible
     """
-    feature_cols   = pipeline_config["feature_cols"]
-    cols_to_flip   = pipeline_config.get("cols_to_flip", [])
-    clip_lower_pct = pipeline_config.get("clip_lower_pct", 1.0)
-    clip_upper_pct = pipeline_config.get("clip_upper_pct", 99.0)
-    feature_range  = tuple(pipeline_config.get("feature_range", [0.0, 1.0]))
-
     train_df = pd.read_csv(trainset_path)
-    log.info("Trainset loaded: %d rows × %d cols", *train_df.shape)
+    log.info("Trainset loaded: %d rows %d cols", *train_df.shape)
+    
+    cols_to_flip   = get_cols_to_flip(train_df, feature_cols)
+    clip_lower_pct = 1.0
+    clip_upper_pct = 99.0
+    feature_range  = tuple([0.0, 1.0])
 
-    # Step 1: FeatureSelector — df → df (feature_cols only)
+    pipeline_config = create_pipeline_config(cols_to_flip=cols_to_flip, clip_lower_pct=clip_lower_pct, clip_upper_pct=clip_upper_pct, feature_range=feature_range)
+
+    # Step 1: FeatureSelector df (feature_cols only)
     selector = FeatureSelector(feature_cols=feature_cols)
     selector.fit(train_df)
     X_selected = selector.transform(train_df)
     assert isinstance(X_selected, pd.DataFrame), "FeatureSelector must return DataFrame"
     log.info("FeatureSelector: %d features selected", len(feature_cols))
 
-    # Step 2: ColumnFlipper — df → df (same cols, sign-flipped where specified)
+    # Step 2: ColumnFlipper df (same cols, sign-flipped where specified)
     flipper = ColumnFlipper(cols_to_flip=cols_to_flip)
     flipper.fit(X_selected)
     X_flipped = flipper.transform(X_selected)
@@ -435,7 +435,7 @@ def train_scaler(
     else:
         log.info("ColumnFlipper: no columns to flip")
 
-    # Step 3: DataFrameMinMaxScaler — df → df (same cols, values in feature_range)
+    # Step 3: DataFrameMinMaxScaler df (same cols, values in feature_range)
     scaler = fit_clipped_scaler(
         X_flipped      = X_flipped,
         feature_cols   = feature_cols,
@@ -458,6 +458,20 @@ def train_scaler(
     return selector, flipper, scaler
 
 
+def get_cols_to_flip(df: pd.DataFrame, cols: list[str]) -> list[str]:
+    """Return the columns in `cols` that are negatively correlated with `df[label_col]`."""
+    labels = df["Label"].to_numpy()
+    cols_to_flip = []
+
+    for col in cols:
+        scores = df[col].to_numpy()
+        flipped = bool(np.corrcoef(scores, labels)[0, 1] < 0)
+        if flipped:
+            cols_to_flip.append(col)
+
+    return cols_to_flip
+
+
 # ===========================================================================
 # CLI
 # ===========================================================================
@@ -467,18 +481,16 @@ def _parse_args(argv=None):
         description="Train FeatureSelector + ColumnFlipper + DataFrameMinMaxScaler and save to JSON."
     )
     p.add_argument("--trainset", required=True, help="Path to trainset.csv")
-    p.add_argument("--config",   required=True, help="Path to pipeline config JSON")
     p.add_argument("--out",      required=True, help="Output path for the scaler artefact JSON")
+    p.add_argument("--cols",      default=FEATURES)
     return p.parse_args(argv)
 
 
 def main(argv=None):
     args = _parse_args(argv)
-    with open(args.config) as f:
-        config = json.load(f)
     train_scaler(
         trainset_path   = args.trainset,
-        pipeline_config = config,
+        feature_cols    = args.cols,
         out_path        = args.out,
     )
 

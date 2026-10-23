@@ -6,8 +6,6 @@ CV reconstruction RMSE and serialises the fitted imputer to JSON.
 
 Pipeline contract
 -----------------
-Raw trainset CSV → FeatureSelector → ColumnFlipper → DataFrameMinMaxScaler
-→ DataFrameImputer (trained here)
 
 The scaler artefact from train_scaler.py is required as input so the imputer
 is always trained on the same scaled space it will see at inference time.
@@ -33,8 +31,6 @@ the pipeline config JSON under the key "missing_proba":
 If absent, a uniform 0.1 is used for all features.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import logging
@@ -50,7 +46,7 @@ from sklearn.impute._iterative import _ImputerTriplet
 from sklearn.linear_model import BayesianRidge
 from sklearn.model_selection import KFold
 
-from .train_scaler import load_preprocessing_steps
+from train_scaler import load_preprocessing_steps
 
 logging.basicConfig(
     level=logging.INFO,
@@ -69,7 +65,7 @@ class DataFrameImputer(BaseEstimator, TransformerMixin):
     DataFrame-preserving wrapper around sklearn SimpleImputer / IterativeImputer.
 
     Guarantees that transform() always returns a pd.DataFrame with the
-    original column names and index intact — sklearn's imputers return
+    original column names and index intact sklearn's imputers return
     numpy arrays by default, silently dropping column names.
 
     Input : pd.DataFrame (may contain NaN)
@@ -99,9 +95,7 @@ class DataFrameImputer(BaseEstimator, TransformerMixin):
 
     def _validate(self, X: pd.DataFrame):
         if not isinstance(X, pd.DataFrame):
-            raise TypeError(
-                f"DataFrameImputer expects a DataFrame, got {type(X).__name__}."
-            )
+            raise TypeError(f"DataFrameImputer expects a DataFrame, got {type(X).__name__}.")
 
 
 # ===========================================================================
@@ -171,7 +165,7 @@ def evaluate_imputers_cv(
     }
 
     print(f"\n{'='*70}")
-    print("IMPUTER SELECTION — CV RECONSTRUCTION EVALUATION")
+    print("IMPUTER SELECTION CV RECONSTRUCTION EVALUATION")
     print(f"  Folds: {n_cv_folds}  Val masks/fold: {n_val_masks}  "
           f"Features evaluated: {len(features)}")
     print(f"{'='*70}\n")
@@ -257,12 +251,12 @@ def evaluate_imputers_cv(
             line += f"  {val:>15.4f}"
         print(line)
 
-    print(f"\n  ✔ Best imputer by RMSE: {results.iloc[0]['label']}\n")
+    print(f"\nBest imputer by RMSE: {results.iloc[0]['label']}\n")
     return results
 
 
 # ===========================================================================
-# Serialisation — captures every private attr needed by transform()
+# Serialisation captures every private attr needed by transform()
 # ===========================================================================
 
 def _serialise_simple_imputer(inner: SimpleImputer, feature_names: list[str]) -> dict:
@@ -341,14 +335,14 @@ def serialise_imputer(imputer: DataFrameImputer, feature_names: list[str]) -> di
 
 
 # ===========================================================================
-# Reconstruction — mirrors serialisation exactly
+# Reconstruction mirrors serialisation exactly
 # ===========================================================================
 
 def _set_dtype_attrs(obj, dtype: np.dtype) -> None:
     """
     Set both _fit_dtype and _fill_dtype on a SimpleImputer instance.
 
-    sklearn renamed _fit_dtype → _fill_dtype between versions. Setting both
+    sklearn renamed _fit_dtype _fill_dtype between versions. Setting both
     ensures the reconstructed imputer works regardless of installed version.
     """
     obj._fit_dtype  = dtype  # sklearn < 1.4
@@ -393,7 +387,7 @@ def _reconstruct_iterative_imputer(cfg: dict) -> IterativeImputer:
     inner._is_empty_feature = np.array(cfg["_is_empty_feature"])
     inner._estimator        = BayesianRidge()  # prototype only
 
-    # Reconstruct initial_imputer_ — do NOT set feature_names_in_ here;
+    # Reconstruct initial_imputer_ do NOT set feature_names_in_ here;
     # IterativeImputer calls it internally with a numpy array and sklearn
     # warns when feature names are present but input is an array.
     init = SimpleImputer(strategy=cfg["initial_strategy"])
@@ -481,36 +475,32 @@ def train_imputer(
     Full imputer training flow.
 
     1. Load preprocessing steps from the scaler artefact.
-    2. Apply selector → flipper → scaler to the raw trainset.
+    2. Apply selecto flipper scaler to the raw trainset.
     3. Evaluate Mean / Median / IterativeImputer via CV reconstruction RMSE.
     4. Fit the winning strategy on the full scaled trainset.
     5. Serialise all fitted attributes to JSON.
     """
-    # ── 1. Load preprocessing steps ──────────────────────────────────────
     selector, flipper, scaler = load_preprocessing_steps(scaler_artefact_path)
     feature_cols = selector.feature_cols
     log.info("Preprocessing steps loaded from %s", scaler_artefact_path)
 
-    # ── 2. Load and preprocess raw trainset ──────────────────────────────
     train_df = pd.read_csv(trainset_path)
-    log.info("Raw trainset: %d rows × %d cols", *train_df.shape)
+    log.info("Raw trainset: %d rows %d cols", *train_df.shape)
 
     X_scaled = scaler.transform(flipper.transform(selector.transform(train_df)))
     assert isinstance(X_scaled, pd.DataFrame), "Preprocessing chain must return DataFrame"
     assert list(X_scaled.columns) == feature_cols, "Column order must match feature_cols"
     log.info(
-        "Preprocessed trainset: %d rows × %d features (selector→flipper→scaler)",
+        "Preprocessed trainset: %d rows %d features (selector flipper scaler)",
         *X_scaled.shape,
     )
 
-    # ── 3. Resolve missing_proba ──────────────────────────────────────────
     if missing_proba is None:
         missing_proba = {f: 0.1 for f in feature_cols}
         log.info("No missing_proba provided — using uniform 0.1 for all features")
     else:
         missing_proba = {f: p for f, p in missing_proba.items() if f in feature_cols}
 
-    # ── 4. Evaluate candidates via CV ─────────────────────────────────────
     imputer_configs = [
         {"label": "Mean",
          "imputer": SimpleImputer(strategy="mean")},
@@ -532,7 +522,6 @@ def train_imputer(
         max_iter        = max_iter,
     )
 
-    # ── 5. Fit winner on full scaled trainset ─────────────────────────────
     best_label  = results.iloc[0]["label"]
     best_config = next(c for c in imputer_configs if c["label"] == best_label)
     final_inner = clone(best_config["imputer"])
@@ -550,7 +539,6 @@ def train_imputer(
     assert X_out.isna().sum().sum() == 0, "transform() must leave no NaN"
     log.info("Post-fit DataFrame contract verified.")
 
-    # ── 6. Serialise ──────────────────────────────────────────────────────
     artefact = {
         "best_label":   best_label,
         "missing_proba": missing_proba,
@@ -564,7 +552,7 @@ def train_imputer(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w") as f:
         json.dump(artefact, f, indent=2)
-    log.info("Imputer artefact saved → %s", out_path)
+    log.info("Imputer artefact saved %s", out_path)
 
     return final_imputer
 

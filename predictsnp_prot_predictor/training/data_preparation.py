@@ -2,9 +2,8 @@
 data_preparation.py
 -------------------
 Splits a full dataset into:
-  - trainset            : 80% stratified split (Criteria × Source_type)
+  - trainset            : 80% stratified split (Criteria Source_type)
   - testset             : 20% stratified split
-  - testset_stringent   : testset rows whose Sequence is NOT present in trainset
   - rows_with_missing   : rows that had NaN in any feature column (excluded from train/test)
 
 Usage:
@@ -21,7 +20,7 @@ from pathlib import Path
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
-
+from features import *
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -82,31 +81,6 @@ def stratified_split(
     return train_df.reset_index(drop=True), test_df.reset_index(drop=True)
 
 
-def build_stringent_testset(
-    train_df: pd.DataFrame,
-    test_df: pd.DataFrame,
-    sequence_col: str = "Sequence",
-) -> pd.DataFrame:
-    """
-    Stringent test subset: test rows whose Sequence is NOT present in trainset.
-    Requires the Sequence column to exist in both DataFrames.
-    """
-    if sequence_col not in test_df.columns:
-        log.warning(
-            "Column '%s' not found — stringent testset will be empty.", sequence_col
-        )
-        return test_df.iloc[0:0].copy()
-
-    train_sequences = set(train_df[sequence_col].dropna())
-    mask = ~test_df[sequence_col].isin(train_sequences)
-    stringent = test_df[mask].copy()
-    log.info(
-        "Stringent testset (novel sequences only): %d / %d rows (%.1f%%)",
-        len(stringent), len(test_df), 100 * len(stringent) / max(len(test_df), 1),
-    )
-    return stringent.reset_index(drop=True)
-
-
 def log_distributions(train_df: pd.DataFrame, test_df: pd.DataFrame) -> None:
     """Print stratification diagnostics."""
     for name, df in [("Train", train_df), ("Test", test_df)]:
@@ -120,7 +94,6 @@ def save_splits(
     outdir: Path,
     train_df: pd.DataFrame,
     test_df: pd.DataFrame,
-    stringent_df: pd.DataFrame,
     missing_df: pd.DataFrame,
 ) -> None:
     """Write all four splits to CSV."""
@@ -129,7 +102,6 @@ def save_splits(
     paths = {
         "trainset.csv":          train_df,
         "testset.csv":           test_df,
-        "testset_stringent.csv": stringent_df,
         "rows_with_missing.csv": missing_df,
     }
     for filename, df in paths.items():
@@ -148,7 +120,6 @@ def prepare_data(
     outdir: str | Path = "splits",
     test_size: float = 0.2,
     random_state: int = 42,
-    sequence_col: str = "Sequence",
     save: bool = True,
 ) -> dict[str, pd.DataFrame]:
     """
@@ -161,26 +132,23 @@ def prepare_data(
     outdir       : directory to write CSV outputs
     test_size    : fraction reserved for testing (default 0.2)
     random_state : reproducibility seed
-    sequence_col : column whose values identify novel sequences for the stringent set
     save         : whether to write CSVs to disk
 
     Returns
     -------
-    dict with keys: train, test, test_stringent, missing
+    dict with keys: train, test, missing
     """
     df = load_and_annotate(Path(input_path))
     complete_df, missing_df = separate_missing(df, feature_cols)
     train_df, test_df = stratified_split(complete_df, test_size, random_state)
-    stringent_df = build_stringent_testset(train_df, test_df, sequence_col)
     log_distributions(train_df, test_df)
 
     if save:
-        save_splits(Path(outdir), train_df, test_df, stringent_df, missing_df)
+        save_splits(Path(outdir), train_df, test_df,  missing_df)
 
     return {
         "train":          train_df,
         "test":           test_df,
-        "test_stringent": stringent_df,
         "missing":        missing_df,
     }
 
@@ -191,18 +159,16 @@ def prepare_data(
 
 def _parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        description="Split full_dataset.csv into train / test / stringent / missing splits."
+        description="Split full_dataset.csv into train / test / missing splits."
     )
     parser.add_argument("--input",        required=True, help="Path to full_dataset.csv")
     parser.add_argument("--outdir",       default="splits", help="Output directory (default: splits/)")
-    parser.add_argument("--feature-cols", nargs="+", required=True, metavar="COL",
-                        help="Feature columns used to detect missing-value rows")
+    parser.add_argument("--feature-cols", nargs="+", metavar="COL",
+                        help="Feature columns used to detect missing-value rows", default=FEATURES)
     parser.add_argument("--test-size",    type=float, default=0.2,
                         help="Fraction for test set (default: 0.2)")
     parser.add_argument("--random-state", type=int,   default=42,
                         help="Random seed (default: 42)")
-    parser.add_argument("--sequence-col", default="Sequence",
-                        help="Column for novel-sequence filtering (default: Sequence)")
     return parser.parse_args(argv)
 
 
@@ -214,7 +180,6 @@ def main(argv=None):
         outdir       = args.outdir,
         test_size    = args.test_size,
         random_state = args.random_state,
-        sequence_col = args.sequence_col,
         save         = True,
     )
 

@@ -6,11 +6,11 @@ Converts the new unified classifier.json (produced by train_classifier.py)
 into the three-file/folder structure expected by apply_pipeline.py:
 
     <outdir>/
-        pipeline_config.json           ← top-level config with all pipeline metadata
-        classifier.json                ← XGBoost native model (booster format)
+        pipeline_config.json           top-level config with all pipeline metadata
+        classifier.json                XGBoost native model (booster format)
         imputer_estimators/
-            round_0_entry_0.json       ← BayesianRidge for feature 0
-            round_0_entry_1.json       ← BayesianRidge for feature 1
+            round_0_entry_0.json       BayesianRidge for feature 0
+            round_0_entry_1.json       BayesianRidge for feature 1
             ...
 
 The XGBoost model is written as a proper native JSON booster file so that
@@ -24,15 +24,13 @@ Usage
         [--variant fast]
         [--version 2.0]
 """
-
-from __future__ import annotations
-
 import argparse
 import json
 import tempfile
 import os
 from pathlib import Path
 
+from datetime import datetime, timezone
 import numpy as np
 
 try:
@@ -41,10 +39,6 @@ try:
 except ImportError:
     _XGB_AVAILABLE = False
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Helpers
-# ═══════════════════════════════════════════════════════════════════════════
 
 def _load(path: Path) -> dict:
     with open(path) as f:
@@ -58,14 +52,9 @@ def _save(obj: dict, path: Path, indent: int = 2) -> None:
     print(f"  wrote  {path}  ({path.stat().st_size / 1024:.1f} KB)")
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Imputer conversion
-# ═══════════════════════════════════════════════════════════════════════════
 
-def _convert_imputer(
-    imp: dict,
-    outdir: Path,
-) -> dict:
+def _convert_imputer(imp: dict, outdir: Path,) -> dict:
     """
     Explode the inline imputation_sequence_ into per-feature files under
     outdir/imputer_estimators/round_0_entry_N.json and return the
@@ -134,9 +123,7 @@ def _convert_imputer(
     }
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # XGBoost conversion
-# ═══════════════════════════════════════════════════════════════════════════
 
 def _convert_xgb(clf: dict, outdir: Path) -> dict:
     """
@@ -177,17 +164,9 @@ def _convert_xgb(clf: dict, outdir: Path) -> dict:
         "best_cv_score": clf.get("best_cv_score", None),
     }
 
-
-# ═══════════════════════════════════════════════════════════════════════════
 # Main converter
-# ═══════════════════════════════════════════════════════════════════════════
 
-def convert(
-    input_path: str | Path,
-    outdir:     str | Path,
-    variant:    str = "fast",
-    version:    str = "2.0",
-) -> None:
+def convert(input_path: str | Path, outdir: str | Path, variant: str = "fast", version: str = "2.0") -> None:
     """
     Convert a unified classifier.json to the three-file apply_pipeline.py format.
 
@@ -195,7 +174,7 @@ def convert(
     ----------
     input_path : path to the new-format classifier.json
     outdir     : output directory (will be created); maps to a PIPELINE_VARIANTS entry
-    variant    : "fast" or "full" — stored in pipeline_config.json for informational use
+    variant    : "fast" or "full" stored in pipeline_config.json for informational use
     version    : version string stored in pipeline_config.json
     """
     input_path = Path(input_path)
@@ -203,7 +182,7 @@ def convert(
     outdir.mkdir(parents=True, exist_ok=True)
 
     print(f"Converting  {input_path}")
-    print(f"      →     {outdir}/")
+    print(f"           {outdir}/")
 
     art   = _load(input_path)
     steps = art["pipeline_steps"]
@@ -214,15 +193,12 @@ def convert(
     imp     = steps["imputer"]
     clf     = steps["classifier"]
 
-    # ── imputer → files ───────────────────────────────────────────────────
     print("[1/3] Exploding imputer BayesianRidge estimators …")
     imputer_cfg = _convert_imputer(imp, outdir)
 
-    # ── XGBoost model → file ──────────────────────────────────────────────
     print("[2/3] Writing XGBoost booster model …")
     classifier_cfg = _convert_xgb(clf, outdir)
 
-    # ── pipeline_config.json ──────────────────────────────────────────────
     print("[3/3] Writing pipeline_config.json …")
 
     # Scaler: copy fields, rename n_samples_seen_ if needed
@@ -238,18 +214,15 @@ def convert(
         "feature_names":   scaler["feature_names"],
     }
 
-    from datetime import datetime, timezone
     pipeline_config = {
         "version":          version,
         "created":          datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "pipeline_variant": variant,
-        # ── step configs (apply_pipeline.py reads these directly) ──────────
         "feature_cols":     sel["feature_cols"],
         "cols_to_flip":     flipper["cols_to_flip"],
         "scaler":           scaler_cfg,
         "imputer":          imputer_cfg,
         "classifier":       classifier_cfg,
-        # ── training provenance (informational) ───────────────────────────
         "training_meta": {
             "best_model":         art.get("best_model"),
             "best_model_type":    art.get("best_model_type"),
@@ -264,13 +237,12 @@ def convert(
 
     _save(pipeline_config, outdir / "pipeline_config.json")
 
-    # ── summary ───────────────────────────────────────────────────────────
     n_est_files = sum(1 for _ in (outdir / "imputer_estimators").glob("*.json"))
-    print(f"✔  Conversion complete")
+    print(f"Conversion complete")
     print(f"   {outdir}/")
-    print(f"   ├── pipeline_config.json")
-    print(f"   ├── classifier.json")
-    print(f"   └── imputer_estimators/  ({n_est_files} BayesianRidge files)")
+    print(f"   pipeline_config.json")
+    print(f"   classifier.json")
+    print(f"   imputer_estimators/  ({n_est_files} BayesianRidge files)")
     print(f"Features  : {sel['feature_cols']}")
     print(f"   Flip cols : {flipper['cols_to_flip']}")
     print(f"   Imputer   : {imp.get('imputer_type')}  "
@@ -278,10 +250,7 @@ def convert(
     print(f"   Classifier: {clf.get('classifier_class')}  "
           f"(CV AUC={clf.get('best_cv_score', art.get('scores', {}).get('cv_auc', 'n/a'))})")
 
-
-# ═══════════════════════════════════════════════════════════════════════════
 # CLI
-# ═══════════════════════════════════════════════════════════════════════════
 
 def _parse_args(argv=None):
     p = argparse.ArgumentParser(

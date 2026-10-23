@@ -4,7 +4,6 @@ setup.py
 predictsnp_prot_predictor/__init__.py
 predictsnp_prot_predictor/custom_transformers.py
 predictsnp_prot_predictor/predict_scores.py
-predictsnp_prot_predictor/predictor_merger.py
 predictsnp_prot_predictor/reconstructors.py
 predictsnp_prot_predictor.egg-info/PKG-INFO
 predictsnp_prot_predictor.egg-info/SOURCES.txt

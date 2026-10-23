@@ -3,16 +3,16 @@ train_classifier.py
 -------------------
 Trains all classifier variants on the fully preprocessed trainset,
 selects the best by mean CV AUC, and serialises:
-  - <out_stem>_classifier.joblib   — fitted best estimator (or GridSearchCV wrapper)
-  - <out_stem>_classifier.json     — full pipeline artifact: feature_names, cv scores,
+  - <out_stem>_classifier.joblib fitted best estimator (or GridSearchCV wrapper)
+  - <out_stem>_classifier.json   full pipeline artifact: feature_names, cv scores,
                                      train scores, best params, all model comparison
                                      results, + fitted-state dump of every pipeline step
-                                     (selector → flipper → scaler → imputer → classifier)
+                                     (selector flipper scaler imputer classifier)
 
 
 Pipeline applied before training
 ---------------------------------
-selector → flipper → scaler → imputer
+selector flipper scaler imputer
 (imputer is a pass-through on feature-complete rows; included so the JSON
 artifact describes the full inference pipeline end-to-end)
 
@@ -52,8 +52,6 @@ Importable API
     proba  = model.predict_proba(X_prep)[:, 1]
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import logging
@@ -78,14 +76,13 @@ try:
 except ImportError:
     _XGB_AVAILABLE = False
 
-# Reuse serialisation helpers from sibling scripts — single source of truth
-from .train_scaler import (
+from train_scaler import (
     load_preprocessing_steps,
     serialise_feature_selector,
     serialise_column_flipper,
     serialise_scaler,
 )
-from .train_imputer import load_imputer_steps, serialise_imputer
+from train_imputer import load_imputer_steps, serialise_imputer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -95,10 +92,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # JSON helpers
-# ═══════════════════════════════════════════════════════════════════════════
-
 def _json_safe(obj: Any) -> Any:
     """Recursively coerce numpy / non-serialisable types to plain Python."""
     if isinstance(obj, dict):
@@ -114,18 +108,15 @@ def _json_safe(obj: Any) -> Any:
     return obj
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Classifier fitted-state extraction
-# ═══════════════════════════════════════════════════════════════════════════
-
 def _serialise_classifier(fitted_model) -> dict:
     """
     Extract the fitted state of the best classifier.
 
     Handles all three wrappers that get_model() may return:
-      - GridSearchCV        → unwrap to .best_estimator_
-      - LogisticRegressionCV→ direct fitted model
-      - Pipeline (logreg_rfe) → RFECV selector + LogisticRegressionCV
+      - GridSearchCV        unwrap to .best_estimator_
+      - LogisticRegressionCV direct fitted model
+      - Pipeline (logreg_rfe) RFECV selector + LogisticRegressionCV
 
     For XGBoost, the full native learner JSON is embedded via
     booster.save_raw("json"), producing the identical structure to
@@ -133,7 +124,6 @@ def _serialise_classifier(fitted_model) -> dict:
     """
     info = {"wrapper_class": type(fitted_model).__name__}
 
-    # ── unwrap GridSearchCV ───────────────────────────────────────────────
     if isinstance(fitted_model, GridSearchCV):
         clf = fitted_model.best_estimator_
         info["best_params"]   = _json_safe(fitted_model.best_params_)
@@ -162,7 +152,6 @@ def _serialise_classifier(fitted_model) -> dict:
     if hasattr(clf, "n_features_in_"):
         info["n_features_in_"] = int(clf.n_features_in_)
 
-    # ── XGBoost — embed full native learner JSON ──────────────────────────
     if hasattr(clf, "get_booster"):
         booster = clf.get_booster()
         native_json_str = booster.save_raw(raw_format="json").decode("utf-8")
@@ -170,14 +159,12 @@ def _serialise_classifier(fitted_model) -> dict:
         if hasattr(clf, "feature_importances_"):
             info["feature_importances_"] = clf.feature_importances_.tolist()
 
-    # ── Random Forest / Extra Trees ───────────────────────────────────────
     elif hasattr(clf, "estimators_") and hasattr(clf, "feature_importances_"):
         info["n_estimators_fit"]     = len(clf.estimators_)
         info["feature_importances_"] = clf.feature_importances_.tolist()
         info["max_depth"]            = clf.max_depth
         info["n_features_in_"]       = int(clf.n_features_in_)
 
-    # ── Logistic Regression (plain + CV) ─────────────────────────────────
     elif hasattr(clf, "coef_"):
         info["coef_"]      = clf.coef_.tolist()
         info["intercept_"] = clf.intercept_.tolist()
@@ -192,7 +179,6 @@ def _serialise_classifier(fitted_model) -> dict:
                 else clf.l1_ratio_.tolist()
             )
 
-    # ── SVM ───────────────────────────────────────────────────────────────
     elif hasattr(clf, "support_vectors_"):
         info["n_support_"]       = clf.n_support_.tolist()
         info["support_vectors_"] = clf.support_vectors_.tolist()
@@ -201,7 +187,6 @@ def _serialise_classifier(fitted_model) -> dict:
         if hasattr(clf, "gamma"):
             info["gamma"] = clf.gamma
 
-    # ── MLP ───────────────────────────────────────────────────────────────
     elif hasattr(clf, "coefs_"):
         info["coefs_"]             = [c.tolist() for c in clf.coefs_]
         info["intercepts_"]        = [b.tolist() for b in clf.intercepts_]
@@ -212,10 +197,7 @@ def _serialise_classifier(fitted_model) -> dict:
     return info
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Model registry
-# ═══════════════════════════════════════════════════════════════════════════
-
 def get_model(
     model_name: str,
     cv_folds: int = 5,
@@ -226,20 +208,19 @@ def get_model(
     Return a configured (unfitted) estimator for the given model name.
 
     All sklearn classifiers natively accept pd.DataFrame and set
-    feature_names_in_ when fit on a DataFrame — no custom wrapper needed.
+    feature_names_in_ when fit on a DataFrame no custom wrapper needed.
 
     GridSearchCV wrappers expose:
-      .best_estimator_   — the winning estimator
-      .best_params_      — its hyperparameters
-      .best_score_       — mean CV AUC (test fold)
-      .cv_results_       — full CV result table incl. mean_train_score
+      .best_estimator_   the winning estimator
+      .best_params_      its hyperparameters
+      .best_score_       mean CV AUC (test fold)
+      .cv_results_       full CV result table incl. mean_train_score
 
     LogisticRegressionCV exposes:
-      .C_                — chosen regularisation strength
-      .scores_           — per-fold AUC array
+      .C_                chosen regularisation strength
+      .scores_           per-fold AUC array
     """
 
-    # ── Logistic Regression ───────────────────────────────────────────────
     if model_name == "logreg_l1":
         return LogisticRegressionCV(
             cv=cv_folds, l1_ratios=(1,), solver="saga",
@@ -256,20 +237,6 @@ def get_model(
             use_legacy_attributes=False,
         )
 
-    if model_name == "logreg_rfe":
-        selector = RFECV(
-            estimator=LogisticRegression(
-                penalty="l2", max_iter=1000, random_state=random_state
-            ),
-            step=1, cv=cv_folds, scoring="roc_auc", n_jobs=n_jobs,
-        )
-        model = LogisticRegressionCV(
-            cv=cv_folds, penalty="l2", solver="lbfgs",
-            max_iter=1000, random_state=random_state, scoring="roc_auc",
-        )
-        return Pipeline([("selector", selector), ("model", model)])
-
-    # ── Random Forest ─────────────────────────────────────────────────────
     if model_name == "rf_1":
         param_grid = {
             "n_estimators":      [50, 100, 150],
@@ -300,7 +267,6 @@ def get_model(
             scoring="roc_auc", n_jobs=n_jobs, return_train_score=True,
         )
 
-    # ── XGBoost ───────────────────────────────────────────────────────────
     if model_name == "xgb_1":
         if not _XGB_AVAILABLE:
             raise ImportError("xgboost is required. pip install xgboost")
@@ -336,17 +302,6 @@ def get_model(
              "min_child_weight": [5, 10, 20],
              "gamma":            [0.1, 0.5, 1.0],
          }
-        #param_grid = {
-        #    "n_estimators":     [300, 350, 400],
-        #    "max_depth":        [3, 4, 5],
-        #    "learning_rate":    [0.025, 0.05, 0.075, 0.1],
-        #    "reg_alpha":        [0.5, 1.0, 1.5],
-        #    "reg_lambda":       [2.0, 5.0, 7.5, 10.0, 12.5],
-        #    "subsample":        [0.6, 0.8, 0.9],
-        #    "colsample_bytree": [0.8, 0.9, 1.0],
-        #    "min_child_weight": [3, 4, 5],
-        #    "gamma":            [0.05, 0.1, 0.5],
-        #}
         return GridSearchCV(
             XGBClassifier(
                 random_state=random_state, eval_metric="logloss",
@@ -356,7 +311,6 @@ def get_model(
             scoring="roc_auc", n_jobs=n_jobs, return_train_score=True,
         )
 
-    # ── SVM ───────────────────────────────────────────────────────────────
     if model_name == "svm_1":
         param_grid = {
             "C":      [0.1, 1, 10, 100],
@@ -382,7 +336,6 @@ def get_model(
             scoring="roc_auc", n_jobs=n_jobs, return_train_score=True,
         )
 
-    # ── MLP ───────────────────────────────────────────────────────────────
     if model_name == "mlp_1":
         param_grid = {
             "hidden_layer_sizes": [(50,), (100,), (50, 25), (100, 50)],
@@ -424,14 +377,12 @@ def get_model(
 
     raise ValueError(
         f"Unknown model name: {model_name!r}. "
-        "Valid names: logreg_l1, logreg_en, logreg_rfe, "
+        "Valid names: logreg_l1, logreg_en, "
         "rf_1, rf_2, xgb_1, xgb_2, svm_1, svm_2, mlp_1, mlp_2"
     )
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Score extraction helpers
-# ═══════════════════════════════════════════════════════════════════════════
 
 def _extract_scores(
     fitted_model,
@@ -444,9 +395,9 @@ def _extract_scores(
     """
     Unified score extraction for all model types.
 
-    GridSearchCV         → .best_score_ for CV AUC; mean_train_score from cv_results_
-    LogisticRegressionCV → extract from .scores_; compute train AUC directly
-    Pipeline             → rerun cross_val_score for CV AUC; predict_proba for train
+    GridSearchCV          best_score_ for CV AUC; mean_train_score from cv_results_
+    LogisticRegressionCV  extract from .scores_; compute train AUC directly
+    Pipeline              rerun cross_val_score for CV AUC; predict_proba for train
     """
     if isinstance(fitted_model, GridSearchCV):
         cv_auc    = float(fitted_model.best_score_)
@@ -512,27 +463,25 @@ def _extract_scores(
 def _print_results_table(results: list[dict]) -> None:
     w = 76
     print(f"\n{'='*w}")
-    print("CLASSIFIER SELECTION — CV RESULTS (sorted by CV AUC ↓)")
+    print("CLASSIFIER SELECTION CV RESULTS (sorted by CV AUC)")
     print(f"{'='*w}")
     print(f"  {'Rank':<5} {'Model':<20} {'CV AUC':>10}  {'STD':>8}  "
           f"{'Train AUC':>10}  {'Train_std':>8} {'Gap':>8}")
     print(f"  {'-'*w}")
     for rank, r in enumerate(results, 1):
-        flag = " ⚠" if r["overfit_gap"] > 0.05 else "  "
+        flag = " | " if r["overfit_gap"] > 0.07 else "  "
         print(
             f"  {rank:<5} {r['model']:<20} {r['cv_auc']:>10.4f}  "
             f"{r['cv_std']:>8.4f}  {r['train_auc']:>10.4f} {r['train_std']:>8.4f} "
             f"{r['overfit_gap']:>+8.4f}{flag}"
         )
     print(f"{'='*w}")
-    print("  ⚠  Gap > 0.05 may indicate overfitting")
-    print(f"  ✔  Best: {results[0]['model']}  "
+    print("  Gap > 0.07 may indicate overfitting")
+    print(f"    Best: {results[0]['model']}  "
           f"(CV AUC = {results[0]['cv_auc']:.4f})\n")
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Load artefacts
-# ═══════════════════════════════════════════════════════════════════════════
 
 def load_classifier_steps(
     scaler_path: str | Path,
@@ -568,9 +517,7 @@ def load_classifier_steps(
     return selector, flipper, scaler, imputer, model
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Main training function
-# ═══════════════════════════════════════════════════════════════════════════
 
 def train_classifier(
     trainset_path: str | Path,
@@ -586,7 +533,7 @@ def train_classifier(
     """
     Full classifier training flow.
 
-    1. Load all preprocessing steps (selector → flipper → scaler → imputer).
+    1. Load all preprocessing steps (selector flipper scaler imputer).
     2. Apply the full preprocessing chain to the trainset.
        The imputer is a pass-through on feature-complete rows (no NaN introduced),
        but including it here means the JSON artifact describes the complete
@@ -594,8 +541,8 @@ def train_classifier(
     3. Train every model in model_names.
     4. Rank by CV AUC, print comparison table.
     5. Serialise the best estimator:
-         <out_stem>_classifier.joblib  — fitted model binary
-         <out_stem>_classifier.json    — full pipeline artifact
+         <out_stem>_classifier.joblib fitted model binary
+         <out_stem>_classifier.json   full pipeline artifact
 
     Parameters
     ----------
@@ -613,7 +560,6 @@ def train_classifier(
     -------
     (best_model, metadata_dict)
     """
-    # ── 1. Load all preprocessing steps ──────────────────────────────────
     selector, flipper, scaler, imputer = load_imputer_steps(
         scaler_artefact_path, imputer_artefact_path
     )
@@ -624,15 +570,11 @@ def train_classifier(
         scaler_artefact_path, imputer_artefact_path,
     )
 
-    # ── 2. Load and preprocess trainset ───────────────────────────────────
     train_df = pd.read_csv(trainset_path)
-    log.info("Raw trainset: %d rows × %d cols", *train_df.shape)
+    log.info("Raw trainset: %d rows %d cols", *train_df.shape)
 
     if label_col not in train_df.columns:
-        raise ValueError(
-            f"Label column {label_col!r} not found. "
-            f"Available columns: {list(train_df.columns)}"
-        )
+        raise ValueError(f"Label column {label_col!r} not found. Available columns: {list(train_df.columns)}")
     y = train_df[label_col].values
     if not np.isin(y, [0, 1]).all():
         raise ValueError(
@@ -640,7 +582,7 @@ def train_classifier(
             f"Found unique values: {np.unique(y)}"
         )
 
-    # Full chain: selector → flipper → scaler → imputer
+    # Full chain: selector flipper scaler imputer
     # Imputer is pass-through on complete rows; included for pipeline consistency
     X = imputer.transform(
             scaler.transform(
@@ -659,8 +601,8 @@ def train_classifier(
         )
 
     log.info(
-        "Preprocessed trainset: %d rows × %d features  "
-        "(selector→flipper→scaler→imputer, 0 NaN)",
+        "Preprocessed trainset: %d rows %d features  "
+        "(selector flipperscalerimputer, 0 NaN)",
         *X.shape,
     )
     log.info(
@@ -668,7 +610,6 @@ def train_classifier(
         dict(zip(*np.unique(y, return_counts=True))),
     )
 
-    # ── 3. Resolve model list ──────────────────────────────────────────────
     _defaults = ["logreg_l1", "logreg_en", "rf_1", "rf_2", "mlp_1", "mlp_2", "svm_1", "svm_2"]
     if _XGB_AVAILABLE:
         _defaults += ["xgb_1", "xgb_2"]
@@ -676,12 +617,10 @@ def train_classifier(
         model_names = _defaults
     log.info("Models to train (%d): %s", len(model_names), model_names)
 
-    # ── 4. Train each model ───────────────────────────────────────────────
     results: list[dict] = []
     fitted_models: dict[str, Any] = {}
 
     for name in model_names:
-        log.info("─" * 60)
         log.info("Training: %s", name)
         try:
             model = get_model(
@@ -697,27 +636,24 @@ def train_classifier(
                 scores["train_auc"], scores["train_std"], scores["overfit_gap"],
             )
         except Exception as exc:
-            log.warning("  SKIPPED %s — %s", name, exc)
+            log.warning("  SKIPPED %s %s", name, exc)
 
     if not results:
         raise RuntimeError("All models failed to train.")
 
-    # ── 5. Rank and print ─────────────────────────────────────────────────
     results.sort(key=lambda r: r["cv_auc"], reverse=True)
     _print_results_table(results)
 
     best_name  = results[0]["model"]
     best_model = fitted_models[best_name]
 
-    # ── 6. Serialise ──────────────────────────────────────────────────────
     out_stem = Path(out_stem)
     out_stem.parent.mkdir(parents=True, exist_ok=True)
     joblib_path = Path(str(out_stem) + "_classifier.joblib")
     json_path   = Path(str(out_stem) + "_classifier.json")
 
-    # Save full GridSearchCV wrapper — preserves best_params_, cv_results_, etc.
     joblib.dump(best_model, joblib_path)
-    log.info("Model binary saved → %s", joblib_path)
+    log.info("Model binary saved %s", joblib_path)
 
     best_inner_type = (
         type(best_model.best_estimator_).__name__
@@ -730,9 +666,8 @@ def train_classifier(
         else feature_cols
     )
 
-    # ── build JSON artifact ───────────────────────────────────────────────
     # pipeline_steps reuses the canonical serialise_* functions from
-    # train_scaler.py and train_imputer.py — single source of truth
+    # train_scaler.py and train_imputer.py single source of truth
     metadata = {
         "best_model":       best_name,
         "best_model_type":  best_inner_type,
@@ -756,7 +691,7 @@ def train_classifier(
             {k: v for k, v in r.items() if k != "all_cv"}
             for r in results
         ],
-        # Full fitted-state of every pipeline step — uses the same
+        # Full fitted-state of every pipeline step uses the same
         # serialise_* functions as train_scaler.py and train_imputer.py
         "pipeline_steps": {
             "feature_selector": serialise_feature_selector(selector),
@@ -769,14 +704,12 @@ def train_classifier(
 
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2, ensure_ascii=False)
-    log.info("Full pipeline artifact saved → %s", json_path)
+    log.info("Full pipeline artifact saved %s", json_path)
 
     return best_model, metadata
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # CLI
-# ═══════════════════════════════════════════════════════════════════════════
 
 _ALL_MODELS = [
     "logreg_l1", "logreg_en",
@@ -797,12 +730,9 @@ def _parse_args(argv=None):
     p.add_argument("--trainset",  required=True, help="Path to trainset.csv")
     p.add_argument("--scaler",    required=True, help="Path to scaler artefact JSON")
     p.add_argument("--imputer",   required=True, help="Path to imputer artefact JSON")
-    p.add_argument("--label-col", required=True, help="Binary label column name")
-    p.add_argument("--out",       required=True,
-                   help="Output path stem (e.g. models/pipeline_A)")
-    p.add_argument("--models",    nargs="+", default=None,
-                   choices=_ALL_MODELS, metavar="MODEL",
-                   help=f"Models to train. Choices: {_ALL_MODELS}")
+    p.add_argument("--label-col", default="Label", help="Binary label column name")
+    p.add_argument("--out",       required=True, help="Output path stem (e.g. models/pipeline_A)")
+    p.add_argument("--models",    nargs="+", default=None, choices=_ALL_MODELS, metavar="MODEL", help=f"Models to train. Choices: {_ALL_MODELS}")
     p.add_argument("--cv-folds",     type=int, default=5)
     p.add_argument("--random-state", type=int, default=42)
     p.add_argument("--n-jobs",       type=int, default=-1)
