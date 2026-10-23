@@ -1,6 +1,6 @@
 # PredictSNPprot
 
-PredictSNPprot is a gradient-boosting consensus predictor of the effect of single amino acid substitutions on protein function. It combines the scores of nine sequence-based variant effect predictors (VEPs) into one pathogenicity/deleteriousness score, and is the successor of the [PredictSNP](https://loschmidt.chemi.muni.cz/predictsnp1/) meta-predictor.
+PredictSNPprot is a gradient-boosting consensus predictor of the effect of single amino acid substitutions on protein function. It combines the scores of nine sequence-based variant effect predictors (VEPs) into one pathogenicity/deleteriousness score.
 
 This repository contains the code to train the model and generate predictions from precomputed tool scores. It accompanies the manuscript *Leakage-Controlled Benchmarking of Variant Effect Predictors and Development of Gradient-Boosting Consensus Model*.
 
